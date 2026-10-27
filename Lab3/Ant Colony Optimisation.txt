@@ -1,0 +1,198 @@
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+
+# Calculate Euclidean distance between two cities
+def distance(city1, city2):
+    return np.linalg.norm(city1 - city2)
+
+
+# Select next city using roulette wheel selection
+def select_next_city(current_city, unvisited, pheromone, distances, alpha, beta):
+    pheromone_values = np.array([pheromone[current_city, j] for j in unvisited])
+    distance_values = np.maximum(
+        np.array([distances[current_city, j] for j in unvisited]),
+        1e-10
+    )
+
+    probabilities = (pheromone_values ** alpha) * ((1 / distance_values) ** beta)
+    probabilities /= probabilities.sum()
+
+    return np.random.choice(unvisited, p=probabilities)
+
+
+# Ant Colony Optimization algorithm
+def solve_tsp_with_aco(cities, num_ants=20, num_iterations=100,
+                       alpha=1.0, beta=5.0, rho=0.5):
+
+    num_cities = len(cities)
+
+    if num_cities < 2:
+        raise ValueError("At least two cities are required.")
+
+    distances = np.zeros((num_cities, num_cities))
+
+    for i in range(num_cities):
+        for j in range(num_cities):
+            distances[i, j] = distance(cities[i], cities[j])
+
+    pheromone = np.ones((num_cities, num_cities))
+    best_route = None
+    best_distance = float("inf")
+
+    for _ in range(num_iterations):
+        ant_routes = []
+        ant_distances = []
+
+        for _ in range(num_ants):
+            start_city = np.random.randint(num_cities)
+            route = [start_city]
+            unvisited = set(range(num_cities)) - {start_city}
+            current_city = start_city
+
+            while unvisited:
+                next_city = select_next_city(
+                    current_city,
+                    list(unvisited),
+                    pheromone,
+                    distances,
+                    alpha,
+                    beta
+                )
+                route.append(next_city)
+                unvisited.remove(next_city)
+                current_city = next_city
+
+            # Total distance includes return to the starting city
+            total_distance = sum(
+                distances[route[i], route[(i + 1) % num_cities]]
+                for i in range(num_cities)
+            )
+
+            ant_routes.append(route)
+            ant_distances.append(total_distance)
+
+            if total_distance < best_distance:
+                best_distance = total_distance
+                best_route = route.copy()
+
+        # Pheromone evaporation
+        pheromone *= (1 - rho)
+
+        # Pheromone deposition
+        for route, total_distance in zip(ant_routes, ant_distances):
+            amount = 1.0 / max(total_distance, 1e-10)
+
+            for i in range(num_cities):
+                city1 = route[i]
+                city2 = route[(i + 1) % num_cities]
+                pheromone[city1, city2] += amount
+                pheromone[city2, city1] += amount
+
+    return best_route, best_distance, distances
+
+
+# Display the optimal route
+def plot_optimal_path(cities, route, total_distance):
+    complete_route = route + [route[0]]
+    route_coords = cities[complete_route]
+
+    plt.figure(figsize=(9, 7))
+
+    plt.plot(
+        route_coords[:, 0],
+        route_coords[:, 1],
+        "b-o",
+        linewidth=2,
+        markersize=7,
+        label="Optimal Path"
+    )
+
+    plt.scatter(
+        cities[:, 0],
+        cities[:, 1],
+        color="red",
+        s=100,
+        zorder=3,
+        label="Cities"
+    )
+
+    for i, city in enumerate(cities):
+        plt.annotate(
+            f"City {i}",
+            city,
+            xytext=(6, 6),
+            textcoords="offset points"
+        )
+
+    plt.title(f"Optimal Route | Total Distance: {total_distance:.2f} km")
+    plt.xlabel("X Coordinate (km)")
+    plt.ylabel("Y Coordinate (km)")
+    plt.legend()
+    plt.grid(True, linestyle="--", alpha=0.5)
+    plt.tight_layout()
+    plt.show()
+
+
+# Main program
+if __name__ == "__main__":
+    np.random.seed(42)
+
+    num_cities = 10
+    num_ants = 20
+    num_iterations = 100
+
+    # Generate random city coordinates
+    cities = np.random.rand(num_cities, 2) * 100
+
+    best_route, best_distance, distances = solve_tsp_with_aco(
+        cities,
+        num_ants=num_ants,
+        num_iterations=num_iterations,
+        alpha=1.0,
+        beta=5.0,
+        rho=0.5
+    )
+
+    # Print results
+    print("\n" + "=" * 50)
+    print("       ANT COLONY OPTIMIZATION")
+    print("       TRAVELING SALESMAN PROBLEM")
+    print("=" * 50)
+
+    print(f"\nNumber of Cities     : {num_cities}")
+    print(f"Number of Ants       : {num_ants}")
+    print(f"Number of Iterations : {num_iterations}")
+
+    print("\n" + "-" * 50)
+    print("OPTIMAL ROUTE AND EDGE DISTANCES")
+    print("-" * 50)
+
+    total = 0.0
+
+    for i in range(len(best_route)):
+        city_a = best_route[i]
+        city_b = best_route[(i + 1) % len(best_route)]
+
+        edge_distance = distances[city_a, city_b]
+        total += edge_distance
+
+        if i == len(best_route) - 1:
+            print(
+                f"City {city_a:2d} -> City {city_b:2d} "
+                f"(Return) = {edge_distance:8.2f} km"
+            )
+        else:
+            print(
+                f"City {city_a:2d} -> City {city_b:2d} "
+                f"          = {edge_distance:8.2f} km"
+            )
+
+    print("-" * 50)
+    print(f"TOTAL DISTANCE              = {total:8.2f} km")
+    print("=" * 50)
+    print("Optimization completed successfully!")
+
+    # Display only one graph
+    plot_optimal_path(cities, best_route, best_distance)
